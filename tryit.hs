@@ -2,10 +2,13 @@ import Graphics.UI.Gtk
 import Control.Monad
 import Data.Array.MArray
 import Data.Array.IO
+import System.Environment
 
 main :: IO ()
 main = do
-  s <- (liftM (!!0)) initGUI
+  --s <- (liftM (!!0)) initGUI
+  s <- (!!0) <$> getArgs
+  initGUI
   let n = read s :: Int
   window  <- windowNew
   hbox    <- hBoxNew True 10
