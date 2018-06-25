@@ -15,6 +15,8 @@ colorWhite = Color 65535 65535 65535
 
 colorBlack :: Color
 colorBlack = Color 0 0 0
+
+-- 0. The main function
              
 main :: IO ()
 main = do
@@ -33,12 +35,24 @@ main = do
        widgetShowAll window
        mainGUI
        
+-- 1. The solution checker
+
+check :: Grid -> Bool -- Do we have a valid Nurikabe solution?
+check grid = (not $ twoByTwoCheck grid) && cluesSatisfied grid
+             
+twoByTwoCheck :: Grid -> Bool
+twoByTwoCheck grid = False
+
+cluesSatisfied :: Grid -> Bool
+cluesSatisfied grid = False
+             
+-- 2. Functions governing the graphical interface and interaction
+       
 createElement :: Table -> IOArray Coord Square -> (Coord, Square) -> IO () -- create either a button or a label
 createElement table trackingArray (coord, Left _) = do -- create a button
                                                     button <- buttonNew
                                                     on button buttonActivated $ buttonClick button coord trackingArray
                                                     tableAttachAt coord table button
-
 createElement table _ (coord, Right n) = do -- create a label
                                          label <- labelNew . Just $ show n
                                          tableAttachAt coord table label
@@ -61,14 +75,16 @@ buttonClick button coord trackingArray = do
                                               Left Shaded -> do
                                                              writeArray trackingArray coord $ Left Unshaded
                                                              buttonChangeColor button colorWhite
-                                                             buttonSetLabel "."
+                                                             buttonSetLabel button "x"
                                               Left Unshaded -> do
                                                                writeArray trackingArray coord $ Left Neutral
-                                                               buttonSetLabel ""
+                                                               buttonSetLabel button ""
                                                             
 buttonChangeColor :: Button -> Color -> IO ()
 buttonChangeColor button color = do widgetModifyBg button StateNormal color 
                                     widgetModifyBg button StatePrelight color
+                                    
+-- 3. Assorted auxiliary functions
                                     
 gridFromString :: String -> Grid
 -- parse a grid encoded as a list of lists of Ints. 0 denotes empty square
@@ -81,7 +97,7 @@ allEqual [] = True
 allEqual [x] = True
 allEqual (x:xs) = allEqual xs && (x == head xs)
 
-intToSquare :: Int -> Either Bool Int
+intToSquare :: Int -> Square
 intToSquare n = assert (n >= 0) $
                 if n == 0 then Left Neutral else Right n
                 
