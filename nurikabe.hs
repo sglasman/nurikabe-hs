@@ -4,7 +4,7 @@ import Data.Array.IO
 import Control.Monad.State
 import System.Environment
 
-data ShadeState = Unshaded | Neutral | Shaded
+data ShadeState = Unshaded | Neutral | Shaded deriving Eq
 type Square = Either ShadeState Clue -- a square in a Nurikabe grid is either a clue or an empty cell which can be marked shaded, unshaded or neutral
 type Clue = Int
 type Grid = [[Square]] 
@@ -38,15 +38,27 @@ main = do
 -- 1. The solution checker
 
 check :: Grid -> Bool -- Do we have a valid Nurikabe solution?
-check grid = (not $ twoByTwoCheck grid) && cluesSatisfied grid
+check grid = twoByTwoCheck grid && cluesSatisfied grid
              
 twoByTwoCheck :: Grid -> Bool
-twoByTwoCheck grid = False
-
+twoByTwoCheck grid = not . elem False . -- for each row:
+                     map (not . elem True) . -- make sure there are no 2x2 shaded areas. Could be done marginally more efficiently by checking for vertical 2x1s then horizontal 1x2s thereof, but oh well
+                     map (map $ isAtTwoByTwo grid) $
+                     coordArray (height grid - 1) (width grid - 1)
+                     
+isAtTwoByTwo :: Grid -> Coord -> Bool --check whether we're at the top left corner of a 2x2 shaded block
+isAtTwoByTwo grid (i, j) = (gridLookup grid (i, j) == Left Shaded) &&
+                           (gridLookup grid (i + 1, j) == Left Shaded) &&
+                           (gridLookup grid (i + 1, j + 1) == Left Shaded) &&
+                           (gridLookup grid (i, j + 1) == Left Shaded)
+                           
 cluesSatisfied :: Grid -> Bool
-cluesSatisfied grid = False
+cluesSatisfied grid = False -- stub
+                     
+gridLookup :: Grid -> Coord -> Square -- unsafe!
+gridLookup grid (i,j) = ((grid !! i) !! j)
              
--- 2. Functions governing the graphical interface and interaction
+-- 2. Functions governing graphical appearance
        
 createElement :: Table -> IOArray Coord Square -> (Coord, Square) -> IO () -- create either a button or a label
 createElement table trackingArray (coord, Left _) = do -- create a button
@@ -65,6 +77,12 @@ tableAttachAt (i, j) table widget = tableAttachDefaults table
                                                         (i - 1)
                                                         i
 
+buttonChangeColor :: Button -> Color -> IO ()
+buttonChangeColor button color = do widgetModifyBg button StateNormal color 
+                                    widgetModifyBg button StatePrelight color
+                                    
+-- 3. Functions governing interaction
+
 buttonClick :: Button -> Coord -> IOArray Coord Square -> IO ()
 buttonClick button coord trackingArray = do 
                                          square <- readArray trackingArray coord
@@ -78,13 +96,9 @@ buttonClick button coord trackingArray = do
                                                              buttonSetLabel button "x"
                                               Left Unshaded -> do
                                                                writeArray trackingArray coord $ Left Neutral
-                                                               buttonSetLabel button ""
-                                                            
-buttonChangeColor :: Button -> Color -> IO ()
-buttonChangeColor button color = do widgetModifyBg button StateNormal color 
-                                    widgetModifyBg button StatePrelight color
-                                    
--- 3. Assorted auxiliary functions
+                                                               buttonSetLabel button ""                                    
+
+-- 4. Assorted auxiliary functions
                                     
 gridFromString :: String -> Grid
 -- parse a grid encoded as a list of lists of Ints. 0 denotes empty square
