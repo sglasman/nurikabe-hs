@@ -3,6 +3,7 @@ import Control.Exception
 import Data.Array.IO
 import Control.Monad.State
 import System.Environment
+import qualified Data.Set.Monad as Set
 
 data ShadeState = Unshaded | Neutral | Shaded deriving Eq
 type Square = Either ShadeState Clue -- a square in a Nurikabe grid is either a clue or an empty cell which can be marked shaded, unshaded or neutral
@@ -46,17 +47,42 @@ twoByTwoCheck grid = not . elem False . -- for each row:
                      map (map $ isAtTwoByTwo grid) $
                      coordArray (height grid - 1) (width grid - 1)
                      
-isAtTwoByTwo :: Grid -> Coord -> Bool --check whether we're at the top left corner of a 2x2 shaded block
-isAtTwoByTwo grid (i, j) = (gridLookup grid (i, j) == Left Shaded) &&
-                           (gridLookup grid (i + 1, j) == Left Shaded) &&
-                           (gridLookup grid (i + 1, j + 1) == Left Shaded) &&
-                           (gridLookup grid (i, j + 1) == Left Shaded)
+isAtTwoByTwo :: Grid -> Coord -> Bool -- check whether we're at the top left corner of a 2x2 shaded block
+isAtTwoByTwo grid (i, j) = (gridLookup grid (i, j) == (Just $ Left Shaded)) &&
+                           (gridLookup grid (i + 1, j) == (Just $ Left Shaded)) &&
+                           (gridLookup grid (i + 1, j + 1) == (Just $ Left Shaded)) &&
+                           (gridLookup grid (i, j + 1) == (Just $ Left Shaded))
                            
 cluesSatisfied :: Grid -> Bool
-cluesSatisfied grid = False -- stub
-                     
-gridLookup :: Grid -> Coord -> Square -- unsafe!
-gridLookup grid (i,j) = ((grid !! i) !! j)
+cluesSatisfied grid = not . elem False .
+                      map (isClueSatisfied grid) $ cluesInGrid grid
+                      
+cluesInGrid :: Grid -> [(Coord, Clue)] -- find all the clues in the grid
+cluesInGrid grid = filter ((/= 0) . snd) .
+                   map (\coord -> (coord, either (\_ -> 0) id $ maybe (Right 0) id (gridLookup grid coord))) . -- look up a clue from the grid; if we're out of bounds, or if it's not a clue, we get 0. no clues should be 0
+                   concat $ coordArray (height grid) (width grid)
+                   
+isClueSatisfied :: Grid -> (Coord, Clue) -> Bool
+isClueSatisfied grid (coord, n) = n == (Set.size $ maxSpread grid coord)
+
+maxSpread :: Grid -> Coord -> Set.Set Coord -- find the unshaded region around a coordinate
+maxSpread grid coord = snd . head . dropWhile ((> 0) . fst) $ iterate (spreadOnce grid) (1, Set.singleton coord)
+
+spreadOnce :: Grid -> (Int, Set.Set Coord) -> (Int, Set.Set Coord) -- We discard the first element of the input tuple.
+-- When given a set S of coordinates, we try to expand S to neighboring unshaded squares in orthogonal directions.
+-- The first element of the output tuple is the amount of new territory acquired; the second element is the expanded set of coords.
+spreadOnce grid (_, s) = ((Set.size s') - (Set.size s), s')
+                         where s' = s >>= (spreadOneSquare grid)
+                    
+spreadOneSquare :: Grid -> Coord -> Set.Set Coord
+spreadOneSquare grid (i, j) = Set.insert (i,j) $ Set.fromList .
+                              filter (\neighbor -> elem (gridLookup grid neighbor) [Just $ Left Unshaded, Just $ Left Neutral]) $
+                              [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]
+                                                
+gridLookup :: Grid -> Coord -> Maybe Square
+gridLookup grid (i,j) = if (1 <= i) && (i <= height grid) && (1 <= j) && (j <= width grid) 
+                        then Just $ (grid !! (i - 1)) !! (j - 1) -- indexing starting at 1 makes sense for puzzle grids!
+                        else Nothing
              
 -- 2. Functions governing graphical appearance
        
