@@ -74,21 +74,29 @@ cluesInGrid grid = filter ((/= 0) . snd) .
                    concat $ coordArray (height grid) (width grid)
                    
 isClueSatisfied :: Grid -> (Coord, Clue) -> Bool
-isClueSatisfied grid (coord, n) = n == (Set.size $ maxSpread grid coord)
+--isClueSatisfied grid (coord, n) = n == (Set.size $ maxSpread grid coord)
+isClueSatisfied grid (coord, n) = n == (length $ maxSpread grid coord)
 
-maxSpread :: Grid -> Coord -> Set.Set Coord -- find the unshaded region around a coordinate
-maxSpread grid coord = snd . head . dropWhile ((> 0) . fst) $ iterate (spreadOnce grid) (1, Set.singleton coord)
+--maxSpread :: Grid -> Coord -> Set.Set Coord -- find the unshaded region around a coordinate
+maxSpread :: Grid -> Coord -> [Coord]
+--maxSpread grid coord = snd . head . dropWhile ((> 0) . fst) $ iterate (spreadOnce grid) (1, Set.singleton coord)
+maxSpread grid coord = snd . head . dropWhile ((> 0) . fst) $ iterate (spreadOnce grid) (1, [coord])
 
-spreadOnce :: Grid -> (Int, Set.Set Coord) -> (Int, Set.Set Coord) -- We discard the first element of the input tuple.
+--spreadOnce :: Grid -> (Int, Set.Set Coord) -> (Int, Set.Set Coord) -- We discard the first element of the input tuple.
 -- When given a set S of coordinates, we try to expand S to neighboring unshaded squares in orthogonal directions.
 -- The first element of the output tuple is the amount of new territory acquired; the second element is the expanded set of coords.
-spreadOnce grid (_, s) = ((Set.size s') - (Set.size s), s')
-                         where s' = s >>= (spreadOneSquare grid)
+--spreadOnce grid (_, s) = ((Set.size s') - (Set.size s), s')
+--                         where s' = s >>= (spreadOneSquare grid)
+spreadOnce :: Grid -> (Int, [Coord]) -> (Int, [Coord])
+spreadOnce grid (_, s) = (length s' - length s, s') where s' = Set.toList . Set.fromList $ (s >>= (spreadOneSquare grid))
+
                     
-spreadOneSquare :: Grid -> Coord -> Set.Set Coord
-spreadOneSquare grid (i, j) = Set.insert (i,j) $ Set.fromList .
-                              filter (\neighbor -> elem (gridLookup grid neighbor) [Just $ Left Unshaded, Just $ Left Neutral]) $
-                              [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]
+--spreadOneSquare :: Grid -> Coord -> Set.Set Coord
+--spreadOneSquare grid (i, j) = Set.insert (i,j) $ Set.fromList .
+--                              filter (\neighbor -> elem (gridLookup grid neighbor) [Just $ Left Unshaded, Just $ Left Neutral]) $
+--                              [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]
+spreadOneSquare grid (i, j) = (i,j): (filter (\neighbor -> elem (gridLookup grid neighbor) [Just $ Left Unshaded, Just $ Left Neutral]) $
+                              [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)])
                                                 
 gridLookup :: Grid -> Coord -> Maybe Square
 gridLookup grid (i,j) = if (1 <= i) && (i <= height grid) && (1 <= j) && (j <= width grid) 
