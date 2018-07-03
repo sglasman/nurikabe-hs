@@ -5,7 +5,7 @@ import Control.Monad.State
 import System.Environment
 import qualified Data.Set.Monad as Set
 
-data ShadeState = Unshaded | Neutral | Shaded deriving Eq
+data ShadeState = Unshaded | Neutral | Shaded deriving (Eq, Show)
 type Square = Either ShadeState Clue -- a square in a Nurikabe grid is either a clue or an empty cell which can be marked shaded, unshaded or neutral
 type Clue = Int
 type Grid = [[Square]] 
@@ -16,6 +16,12 @@ colorWhite = Color 65535 65535 65535
 
 colorBlack :: Color
 colorBlack = Color 0 0 0
+
+colorRed :: Color
+colorRed = Color 65535 0 0
+
+colorGreen :: Color
+colorGreen = Color 0 65535 0
 
 -- 0. The main function
              
@@ -29,9 +35,14 @@ main = do
        window <- windowNew
        set window [windowTitle := "Nurikabe", containerBorderWidth := 18,
                    windowDefaultWidth := 36 * (width grid + 1), windowDefaultHeight := 36 * (height grid + 1)]
-       table <- tableNew (height grid) (width grid) True
+       table <- tableNew (height grid + 1) (width grid) True
        containerAdd window table
-       sequence_ . (map $ createElement table trackingArray) . concat $ zippedGrid
+       sequence_ . (map $ createElement table trackingArray window) . concat $ zippedGrid
+       submitButton <- buttonNewWithLabel "SUBMIT"
+       tableAttachDefaults table submitButton 0 (width grid) (height grid) (height grid + 1)
+       on submitButton buttonActivated $ do
+                                         result <- check <$> extractGrid trackingArray ((height grid), (width grid)) -- let's pull the grid out, since I wrote the checking functions for a Grid.
+                                         widgetModifyBg window StateNormal (if result then colorGreen else colorRed)
        onDestroy window mainQuit
        widgetShowAll window
        mainGUI
@@ -86,14 +97,16 @@ gridLookup grid (i,j) = if (1 <= i) && (i <= height grid) && (1 <= j) && (j <= w
              
 -- 2. Functions governing graphical appearance
        
-createElement :: Table -> IOArray Coord Square -> (Coord, Square) -> IO () -- create either a button or a label
-createElement table trackingArray (coord, Left _) = do -- create a button
-                                                    button <- buttonNew
-                                                    on button buttonActivated $ buttonClick button coord trackingArray
-                                                    tableAttachAt coord table button
-createElement table _ (coord, Right n) = do -- create a label
-                                         label <- labelNew . Just $ show n
-                                         tableAttachAt coord table label
+createElement :: Table -> IOArray Coord Square -> Window -> (Coord, Square) -> IO () -- create either a button or a label
+createElement table trackingArray window (coord, Left _) = do -- create a button
+                                                           button <- buttonNew
+                                                           on button buttonActivated $ do
+                                                                                       widgetModifyBg window StateNormal colorWhite -- if the window is red or green after submitting, change it back
+                                                                                       buttonClick button coord trackingArray
+                                                           tableAttachAt coord table button
+createElement table _ window (coord, Right n) = do -- create a label
+                                                label <- labelNew . Just $ show n
+                                                tableAttachAt coord table label
                                                       
 tableAttachAt :: WidgetClass a => Coord -> Table -> a -> IO ()
 tableAttachAt (i, j) table widget = tableAttachDefaults table
@@ -110,7 +123,7 @@ buttonChangeColor button color = do widgetModifyBg button StateNormal color
 -- 3. Functions governing interaction
 
 buttonClick :: Button -> Coord -> IOArray Coord Square -> IO ()
-buttonClick button coord trackingArray = do 
+buttonClick button coord trackingArray = do
                                          square <- readArray trackingArray coord
                                          case square of  -- cycle through shading states
                                               Left Neutral -> do
@@ -149,3 +162,8 @@ width = length . (!! 0)
 
 coordArray :: Int -> Int -> [[Coord]]
 coordArray height width = map (\y -> [(y, x) | x <- [1..width]]) [1..height]
+
+extractGrid :: IOArray Coord Square -> (Int, Int) -> IO Grid
+extractGrid trackingArray (h, w) = mapM (mapM (
+                                   \coord -> readArray trackingArray coord)) $ 
+                                   coordArray h w 
