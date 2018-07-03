@@ -50,7 +50,7 @@ main = do
 -- 1. The solution checker
 
 check :: Grid -> Bool -- Do we have a valid Nurikabe solution?
-check grid = twoByTwoCheck grid && cluesSatisfied grid
+check grid = twoByTwoCheck grid && cluesSatisfied grid && isConnected grid
              
 twoByTwoCheck :: Grid -> Bool
 twoByTwoCheck grid = not . elem False . -- for each row:
@@ -74,34 +74,33 @@ cluesInGrid grid = filter ((/= 0) . snd) .
                    concat $ coordArray (height grid) (width grid)
                    
 isClueSatisfied :: Grid -> (Coord, Clue) -> Bool
---isClueSatisfied grid (coord, n) = n == (Set.size $ maxSpread grid coord)
-isClueSatisfied grid (coord, n) = n == (length $ maxSpread grid coord)
+isClueSatisfied grid (coord, n) = n == (length $ maxSpread grid [Left Unshaded, Left Neutral] coord)
 
---maxSpread :: Grid -> Coord -> Set.Set Coord -- find the unshaded region around a coordinate
-maxSpread :: Grid -> Coord -> [Coord]
---maxSpread grid coord = snd . head . dropWhile ((> 0) . fst) $ iterate (spreadOnce grid) (1, Set.singleton coord)
-maxSpread grid coord = snd . head . dropWhile ((> 0) . fst) $ iterate (spreadOnce grid) (1, [coord])
+maxSpread :: Grid -> [Square] -> Coord -> [Coord] -- Find the largest region of shaded/unshaded squares containing a given square. The second argument is the list of square types we can expand into.
+maxSpread admissibles grid coord = snd . head . dropWhile ((> 0) . fst) $ iterate (spreadOnce admissibles grid) (1, [coord])
 
---spreadOnce :: Grid -> (Int, Set.Set Coord) -> (Int, Set.Set Coord) -- We discard the first element of the input tuple.
--- When given a set S of coordinates, we try to expand S to neighboring unshaded squares in orthogonal directions.
+spreadOnce :: Grid -> [Square] -> (Int, [Coord]) -> (Int, [Coord])
+-- When given a set S of coordinates, we try to expand S to neighboring unshaded/shaded squares in orthogonal directions. 
 -- The first element of the output tuple is the amount of new territory acquired; the second element is the expanded set of coords.
---spreadOnce grid (_, s) = ((Set.size s') - (Set.size s), s')
---                         where s' = s >>= (spreadOneSquare grid)
-spreadOnce :: Grid -> (Int, [Coord]) -> (Int, [Coord])
-spreadOnce grid (_, s) = (length s' - length s, s') where s' = Set.toList . Set.fromList $ (s >>= (spreadOneSquare grid))
+spreadOnce grid admissibles (_, s) = (length s' - length s, s') where s' = Set.toList . Set.fromList $ (s >>= (spreadOneSquare grid admissibles ))
 
-                    
---spreadOneSquare :: Grid -> Coord -> Set.Set Coord
---spreadOneSquare grid (i, j) = Set.insert (i,j) $ Set.fromList .
---                              filter (\neighbor -> elem (gridLookup grid neighbor) [Just $ Left Unshaded, Just $ Left Neutral]) $
---                              [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]
-spreadOneSquare grid (i, j) = (i,j): (filter (\neighbor -> elem (gridLookup grid neighbor) [Just $ Left Unshaded, Just $ Left Neutral]) $
-                              [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)])
+spreadOneSquare :: Grid -> [Square] -> Coord -> [Coord]
+spreadOneSquare grid admissibles (i, j) = (i,j): (filter (\neighbor -> elem (gridLookup grid neighbor) (map Just admissibles)) $
+                                    [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)])
                                                 
 gridLookup :: Grid -> Coord -> Maybe Square
 gridLookup grid (i,j) = if (1 <= i) && (i <= height grid) && (1 <= j) && (j <= width grid) 
                         then Just $ (grid !! (i - 1)) !! (j - 1) -- indexing starting at 1 makes sense for puzzle grids!
                         else Nothing
+                        
+findShaded :: Grid -> [Coord]
+findShaded grid = filter (\coord -> gridLookup grid coord == (Just $ Left Shaded))
+                         (concat $ coordArray (height grid) (width grid))
+                         
+isConnected :: Grid -> Bool -- Check whether the shaded area is connected by checking that the size of the largest shaded area containing the first shaded cell is equal to the number of shaded cells.
+isConnected grid = let shadeds = findShaded grid
+                   in (shadeds == []) ||
+                      ((length . maxSpread grid [Left Shaded] $ head shadeds) == length shadeds)
              
 -- 2. Functions governing graphical appearance
        
